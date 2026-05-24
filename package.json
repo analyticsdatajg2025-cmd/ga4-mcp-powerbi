@@ -1,0 +1,21 @@
+{
+  "name": "ga4-mcp-powerbi",
+  "version": "1.0.0",
+  "description": "MCP para GA4 + Claude + Power BI",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@google-analytics/data": "^6.0.0",
+    "axios": "^1.6.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
