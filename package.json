@@ -5,18 +5,14 @@
   "description": "MCP Server for GA4 + Claude API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "axios": "^1.6.0",
-    "googleapis": "^118.0.0",
-    "@google-analytics/data": "^4.20.0"
+    "googleapis": "^118.0.0"
   },
-  "keywords": ["ga4", "analytics", "claude", "mcp"],
-  "author": "",
   "license": "MIT"
 }
