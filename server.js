@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import fs from 'fs';
 import { BetaAnalyticsDataClient } from '@google-analytics/data';
 import axios from 'axios';
 
@@ -15,61 +14,33 @@ app.use(cors());
 let analyticsDataClient;
 
 try {
-  let credentials;
-  
   console.log('🔐 Intentando cargar credenciales de GA4...');
   
-  // Opción 1: Variable de entorno (Railway)
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-    try {
-      credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
-      console.log('✅ Credenciales cargadas desde variable de entorno');
-    } catch (parseError) {
-      console.warn('⚠️ Error parseando variable de entorno, intentando archivo...');
-      credentials = null;
-    }
+  const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  
+  if (!credentialsJson) {
+    throw new Error('GOOGLE_APPLICATION_CREDENTIALS_JSON no está configurado');
   }
   
-  // Opción 2: Archivo local credentials.json (Railway)
-  if (!credentials && fs.existsSync('./credentials.json')) {
-    try {
-      const credentialContent = fs.readFileSync('./credentials.json', 'utf8');
-      credentials = JSON.parse(credentialContent);
-      console.log('✅ Credenciales cargadas desde archivo credentials.json');
-    } catch (fileError) {
-      console.warn('⚠️ Error leyendo archivo credentials.json');
-      credentials = null;
-    }
+  let credentials;
+  try {
+    credentials = JSON.parse(credentialsJson);
+    console.log('✅ Credenciales cargadas desde GOOGLE_APPLICATION_CREDENTIALS_JSON');
+  } catch (parseError) {
+    console.error('❌ Error parseando JSON:', parseError.message);
+    throw new Error(`Error parseando credenciales: ${parseError.message}`);
   }
   
-  // Opción 3: Ruta especificada en variable (fallback)
-  if (!credentials && process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    try {
-      const credentialPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-      const credentialContent = fs.readFileSync(credentialPath, 'utf8');
-      credentials = JSON.parse(credentialContent);
-      console.log('✅ Credenciales cargadas desde ruta especificada');
-    } catch (pathError) {
-      console.warn('⚠️ Error leyendo credenciales de ruta especificada');
-      credentials = null;
-    }
-  }
+  // Inicializar cliente de GA4
+  analyticsDataClient = new BetaAnalyticsDataClient({
+    credentials: credentials,
+    projectId: credentials.project_id
+  });
   
-  // Inicializar cliente
-  if (credentials) {
-    analyticsDataClient = new BetaAnalyticsDataClient({
-      credentials: credentials,
-      projectId: credentials.project_id
-    });
-    console.log(`✅ Cliente de GA4 configurado para proyecto: ${credentials.project_id}`);
-  } else {
-    // Último recurso: usar credenciales por defecto del sistema
-    analyticsDataClient = new BetaAnalyticsDataClient();
-    console.log('⚠️ Usando credenciales por defecto del sistema');
-  }
+  console.log(`✅ Cliente de GA4 configurado para proyecto: ${credentials.project_id}`);
 } catch (error) {
-  console.error('❌ Error inicializando GA4:', error.message);
-  throw error;
+  console.error('❌ Error fatal inicializando GA4:', error.message);
+  process.exit(1);
 }
 
 async function getGA4Data(metric, dimension, days = 7) {
@@ -79,6 +50,8 @@ async function getGA4Data(metric, dimension, days = 7) {
     if (!propertyId) {
       throw new Error('GA4_PROPERTY_ID no está configurado');
     }
+    
+    console.log(`Consultando GA4: metric=${metric}, dimension=${dimension}, days=${days}`);
     
     const response = await analyticsDataClient.runReport({
       property: `properties/${propertyId}`,
