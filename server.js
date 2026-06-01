@@ -16,19 +16,21 @@ let analyticsDataClient;
 try {
   console.log('🔐 Intentando cargar credenciales de GA4...');
   
-  const credentialsJson = process.env.GCP_CREDENTIALS;
+  const credentialsBase64 = process.env.GCP_CREDENTIALS_BASE64;
   
-  if (!credentialsJson) {
-    throw new Error('GOOGLE_APPLICATION_CREDENTIALS_JSON no está configurado');
+  if (!credentialsBase64) {
+    throw new Error('GCP_CREDENTIALS_BASE64 no está configurado');
   }
   
   let credentials;
   try {
+    // Decodificar Base64
+    const credentialsJson = Buffer.from(credentialsBase64, 'base64').toString('utf-8');
     credentials = JSON.parse(credentialsJson);
-    console.log('✅ Credenciales cargadas desde GOOGLE_APPLICATION_CREDENTIALS_JSON');
-  } catch (parseError) {
-    console.error('❌ Error parseando JSON:', parseError.message);
-    throw new Error(`Error parseando credenciales: ${parseError.message}`);
+    console.log(`✅ Credenciales decodificadas. Proyecto: ${credentials.project_id}`);
+  } catch (decodeError) {
+    console.error('❌ Error decodificando credenciales:', decodeError.message);
+    throw new Error(`Error decodificando credenciales: ${decodeError.message}`);
   }
   
   // Inicializar cliente de GA4
