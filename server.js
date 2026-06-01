@@ -16,7 +16,7 @@ let analyticsDataClient;
 try {
   console.log('🔐 Intentando cargar credenciales de GA4...');
   
-  const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  const credentialsJson = process.env.GCP_CREDENTIALS;
   
   if (!credentialsJson) {
     throw new Error('GOOGLE_APPLICATION_CREDENTIALS_JSON no está configurado');
