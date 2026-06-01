@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-let analyticsReporting;
+let authClient;
 
 try {
   console.log('🔐 Cargando credenciales...');
@@ -24,17 +24,12 @@ try {
   const credentialsJson = Buffer.from(credentialsBase64, 'base64').toString('utf-8');
   const credentials = JSON.parse(credentialsJson);
   
-  const auth = new google.auth.GoogleAuth({
+  authClient = new google.auth.GoogleAuth({
     credentials: credentials,
     scopes: ['https://www.googleapis.com/auth/analytics.readonly'],
   });
   
-  analyticsReporting = google.analyticsreporting({
-    version: 'v4',
-    auth: auth,
-  });
-  
-  console.log('✅ Analytics API inicializado');
+  console.log('✅ Auth inicializado');
 } catch (error) {
   console.error('❌ Error:', error.message);
   process.exit(1);
@@ -48,46 +43,48 @@ function getDateDaysAgo(days) {
 
 async function getGA4Data(metric, dimension, days = 7) {
   try {
-    const viewId = process.env.GA4_PROPERTY_ID;
+    const propertyId = process.env.GA4_PROPERTY_ID;
     
-    if (!viewId) {
-      throw new Error('GA4_PROPERTY_ID no está configurado');
+    if (!propertyId) {
+      throw new Error('GA4_PROPERTY_ID no configurado');
     }
-    
-    const response = await analyticsReporting.reports.batchGet({
-      requestBody: {
-        reportRequests: [
+
+    const token = await authClient.getAccessToken();
+    const accessToken = token.token;
+
+    const response = await axios.post(
+      `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+      {
+        dateRanges: [
           {
-            viewId: viewId,
-            dateRanges: [
-              {
-                startDate: getDateDaysAgo(days),
-                endDate: 'today',
-              },
-            ],
-            metrics: [{ expression: `ga:${metric}` }],
-            dimensions: dimension ? [{ name: `ga:${dimension}` }] : [],
-            pageSize: 10,
+            startDate: getDateDaysAgo(days),
+            endDate: 'today',
           },
         ],
+        metrics: [{ name: metric }],
+        dimensions: dimension ? [{ name: dimension }] : [],
+        limit: 10,
       },
-    });
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
-    const report = response.data.reports?.[0];
-    if (!report?.data?.rows) {
-      return [];
-    }
-
+    const rows = response.data.rows || [];
     const results = [];
-    report.data.rows.forEach((row) => {
+
+    rows.forEach((row) => {
       const obj = {};
       
-      report.columnHeader.dimensions?.forEach((dim, idx) => {
-        obj[dim.replace('ga:', '')] = row.dimensions[idx];
+      response.data.dimensionHeaders?.forEach((dim, idx) => {
+        obj[dim.name] = row.dimensionValues[idx]?.value || 'N/A';
       });
       
-      report.columnHeader.metricHeader.metricHeaderEntries.forEach((metric, idx) => {
-        obj[metric.name.replace('ga:', '')] = row.metrics[0].values[idx];
+      response.data.metricHeaders?.forEach((metric, idx) => {
+        obj[metric.name] = row.metricValues[idx]?.value || 0;
       });
       
       results.push(obj);
@@ -96,6 +93,9 @@ async function getGA4Data(metric, dimension, days = 7) {
     return results;
   } catch (error) {
     console.error('❌ Error GA4:', error.message);
+    if (error.response?.data) {
+      console.error('Detalles:', error.response.data);
+    }
     throw error;
   }
 }
@@ -115,7 +115,7 @@ async function processWithClaude(question, gaData) {
         max_tokens: 1024,
         messages: [{
           role: 'user',
-          content: `Analista de datos. Pregunta: "${question}"\n\nDatos GA4: ${JSON.stringify(gaData)}`
+          content: `Eres analista de datos. Pregunta: "${question}"\n\nDatos GA4: ${JSON.stringify(gaData)}`
         }],
       },
       {
@@ -136,7 +136,7 @@ async function processWithClaude(question, gaData) {
 
 app.post('/api/ask', async (req, res) => {
   try {
-    const { question, metric = 'sessions', dimension = null, days = 7 } = req.body;
+    const { question, metric = 'activeUsers', dimension = null, days = 7 } = req.body;
 
     if (!question) {
       return res.status(400).json({ error: 'Se requiere pregunta' });
@@ -152,7 +152,7 @@ app.post('/api/ask', async (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK ✅' });
+  res.json({ status: 'OK' });
 });
 
 const PORT = process.env.PORT || 3000;
