@@ -14,7 +14,7 @@
     "dotenv": "^16.3.1",
     "axios": "^1.6.0",
     "googleapis": "^118.0.0",
-    "@google-analytics/data": "^9.2.0"
+    "@google-analytics/data": "^4.20.0"
   },
   "keywords": ["ga4", "analytics", "claude", "mcp"],
   "author": "",
