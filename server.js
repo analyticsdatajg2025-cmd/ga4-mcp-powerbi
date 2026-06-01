@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { google } from 'googleapis';
 import { BetaAnalyticsDataClient } from '@google-analytics/data';
 import axios from 'axios';
 
@@ -10,11 +11,10 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Inicializar cliente de Google Analytics
 let analyticsDataClient;
 
 try {
-  console.log('🔐 Intentando cargar credenciales de GA4...');
+  console.log('🔐 Cargando credenciales de GA4...');
   
   const credentialsBase64 = process.env.GCP_CREDENTIALS_BASE64;
   
@@ -22,26 +22,25 @@ try {
     throw new Error('GCP_CREDENTIALS_BASE64 no está configurado');
   }
   
-  let credentials;
-  try {
-    // Decodificar Base64
-    const credentialsJson = Buffer.from(credentialsBase64, 'base64').toString('utf-8');
-    credentials = JSON.parse(credentialsJson);
-    console.log(`✅ Credenciales decodificadas. Proyecto: ${credentials.project_id}`);
-  } catch (decodeError) {
-    console.error('❌ Error decodificando credenciales:', decodeError.message);
-    throw new Error(`Error decodificando credenciales: ${decodeError.message}`);
-  }
+  const credentialsJson = Buffer.from(credentialsBase64, 'base64').toString('utf-8');
+  const credentials = JSON.parse(credentialsJson);
   
-  // Inicializar cliente de GA4
-  analyticsDataClient = new BetaAnalyticsDataClient({
+  // Usar GoogleAuth para mejor compatibilidad
+  const auth = new google.auth.GoogleAuth({
     credentials: credentials,
-    projectId: credentials.project_id
+    scopes: [
+      'https://www.googleapis.com/auth/analytics.readonly',
+      'https://www.googleapis.com/auth/analytics',
+    ],
   });
   
-  console.log(`✅ Cliente de GA4 configurado para proyecto: ${credentials.project_id}`);
+  analyticsDataClient = new BetaAnalyticsDataClient({
+    auth: auth,
+  });
+  
+  console.log(`✅ Cliente GA4 inicializado correctamente`);
 } catch (error) {
-  console.error('❌ Error fatal inicializando GA4:', error.message);
+  console.error('❌ Error inicializando GA4:', error.message);
   process.exit(1);
 }
 
@@ -53,7 +52,7 @@ async function getGA4Data(metric, dimension, days = 7) {
       throw new Error('GA4_PROPERTY_ID no está configurado');
     }
     
-    console.log(`Consultando GA4: metric=${metric}, dimension=${dimension}, days=${days}`);
+    console.log(`📊 Consultando GA4: metric=${metric}, dimension=${dimension}`);
     
     const response = await analyticsDataClient.runReport({
       property: `properties/${propertyId}`,
@@ -70,7 +69,7 @@ async function getGA4Data(metric, dimension, days = 7) {
 
     return parseGA4Response(response);
   } catch (error) {
-    console.error('Error GA4:', error.message);
+    console.error('❌ Error GA4:', error.message);
     throw error;
   }
 }
@@ -112,18 +111,12 @@ async function processQuestionWithClaude(question, gaData) {
     const prompt = `
 Eres un analista de datos experto en Google Analytics 4.
 
-La pregunta del usuario es: "${question}"
+Pregunta: "${question}"
 
-Aquí están los datos de GA4:
+Datos de GA4:
 ${JSON.stringify(gaData, null, 2)}
 
-Por favor:
-1. Analiza estos datos en detalle
-2. Responde la pregunta del usuario de forma clara
-3. Proporciona insights valiosos y recomendaciones
-4. Si faltan datos, menciona qué información adicional sería útil
-
-Responde en un formato profesional y fácil de entender.
+Analiza estos datos y responde la pregunta de forma clara, profesional y con insights valiosos.
 `;
 
     const response = await axios.post(
@@ -144,7 +137,7 @@ Responde en un formato profesional y fácil de entender.
 
     return response.data.content[0].text;
   } catch (error) {
-    console.error('Error Claude:', error.message);
+    console.error('❌ Error Claude:', error.message);
     throw error;
   }
 }
@@ -157,15 +150,12 @@ app.post('/api/ask', async (req, res) => {
       return res.status(400).json({ error: 'Se requiere una pregunta' });
     }
 
-    console.log('📊 Obteniendo datos de GA4...');
     const gaData = await getGA4Data(metric, dimension, days);
-
-    console.log('🤖 Procesando con Claude...');
     const analysis = await processQuestionWithClaude(question, gaData);
 
     res.json({ success: true, question, data: gaData, analysis });
   } catch (error) {
-    console.error('Error en /api/ask:', error.message);
+    console.error('❌ Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -176,6 +166,5 @@ app.get('/health', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor MCP GA4 corriendo en puerto ${PORT}`);
-  console.log(`📊 Property ID configurado: ${process.env.GA4_PROPERTY_ID}`);
+  console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
 });
